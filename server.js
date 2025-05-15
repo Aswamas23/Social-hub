@@ -1,95 +1,164 @@
-require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
+const MemoryStore = require('memorystore')(session);
 const bcrypt = require('bcryptjs');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// In-memory user storage (replace with DB in production)
+const users = [];
+
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-// --- Session Store (MemoryStore is NOT for production!) ---
-const sessionConfig = {
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // true if behind HTTPS
-    maxAge: 1000 * 60 * 60 * 2 // 2 hours
-  }
-};
-app.use(session(sessionConfig));
-
-// --- Serve static files ---
+// Serve static files from public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- In-memory or file-based user store for demo (replace with DB in production) ---
-const USERS_FILE = path.join(__dirname, 'users.json');
-function loadUsers() {
-  try {
-    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-  } catch {
-    return [];
+// Session configuration with memorystore
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your_secure_secret_key',
+  resave: false,
+  saveUninitialized: false,
+  store: new MemoryStore({
+    checkPeriod: 86400000 // prune expired entries every 24h
+  }),
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
-}
-function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
+}));
 
-// --- Routes ---
+// Routes to serve pages
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/login.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/signup.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signup.html')));
+app.get('/support.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'support.html')));
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Signup
+// Registration handler
 app.post('/signup', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).send('Missing fields');
-  const users = loadUsers();
-  if (users.find(u => u.username === username)) return res.status(400).send('User exists');
-  const hash = await bcrypt.hash(password, 12);
-  users.push({ username, password: hash });
-  saveUsers(users);
-  res.send('Signup successful!');
-});
+  try {
+    const { name, email, password } = req.body;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Login
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).send('Missing fields');
-  const users = loadUsers();
-  const user = users.find(u => u.username === username);
-  if (!user) return res.status(400).send('User not found');
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) return res.status(400).send('Invalid credentials');
-  req.session.user = username;
-  res.send('Login successful!');
-});
+    if (!name || !email || !password) {
+      return res.redirect('/signup.html?error=All%20fields%20are%20required');
+    }
+    if (!emailRegex.test(email)) {
+      return res.redirect('/signup.html?error=Invalid%20email%20format');
+    }
+    if (password.length < 8) {
+      return res.redirect('/signup.html?error=Password%20must%20be%20at%20least%208%20characters');
+    }
+    if (users.some(u => u.email === email)) {
+      return res.redirect('/signup.html?error=Email%20already%20registered');
+    }
 
-// Logout
-app.get('/logout', (req, res) => {
-  req.session.destroy(() => res.send('Logged out!'));
-});
+    const hashedPassword = await bcrypt.hash(password, 12);
+    users.push({
+      id: Date.now().toString(),
+      name,
+      email,
+      password: hashedPassword,
+      joined: new Date().toISOString()
+    });
 
-// Protected route example
-app.get('/dashboard', (req, res) => {
-  if (!req.session.user) return res.status(401).send('Unauthorized');
-  res.send(`Welcome, ${req.session.user}!`);
-});
-
-// --- Error handling ---
-app.use((err, req, res, next) => {
-  if (process.env.NODE_ENV === 'production') {
-    res.status(500).send('Server error');
-  } else {
-    res.status(500).send(err.stack);
+    res.redirect('/login.html?success=Registration%20successful.%20Please%20login');
+  } catch (err) {
+    console.error('Signup error:', err);
+    res.redirect('/signup.html?error=Server%20error');
   }
 });
 
-// --- Start server ---
-const PORT = process.env.PORT || 3000;
+// Login handler
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = users.find(u => u.email === email);
+
+    if (!user) {
+      // Delay to mitigate brute force
+      await new Promise(r => setTimeout(r, 2000));
+      return res.redirect('/login.html?error=Invalid%20credentials');
+    }
+
+    const validPass = await bcrypt.compare(password, user.password);
+    if (!validPass) {
+      await new Promise(r => setTimeout(r, 2000));
+      return res.redirect('/login.html?error=Invalid%20credentials');
+    }
+
+    // Regenerate session to prevent fixation
+    req.session.regenerate(err => {
+      if (err) {
+        console.error('Session regeneration error:', err);
+        return res.redirect('/login.html?error=Server%20error');
+      }
+      req.session.user = {
+        id: user.id,
+        name: user.name,
+        email: user.email
+      };
+      req.session.save(err => {
+        if (err) {
+          console.error('Session save error:', err);
+          return res.redirect('/login.html?error=Server%20error');
+        }
+        res.redirect('/?success=Login%20successful');
+      });
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.redirect('/login.html?error=Server%20error');
+  }
+});
+
+// Logout endpoint
+app.post('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      console.error('Logout error:', err);
+      return res.redirect('/?error=Logout%20failed');
+    }
+    res.clearCookie('connect.sid');
+    res.redirect('/login.html?success=Logged%20out%20successfully');
+  });
+});
+
+// Support form handler
+app.post('/support', (req, res) => {
+  const { name, email, message } = req.body;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!name || !email || !message) {
+    return res.redirect('/support.html?error=All%20fields%20are%20required');
+  }
+  if (!emailRegex.test(email)) {
+    return res.redirect('/support.html?error=Invalid%20email%20format');
+  }
+
+  // Here you would typically send the message to your support system
+  console.log('Support request:', { name, email, message });
+  res.redirect('/support.html?success=Message%20sent%20successfully');
+});
+
+// Middleware to check if user is logged in
+const isLoggedIn = (req, res, next) => {
+  if (req.session.user) {
+    return next();
+  }
+  res.redirect('/login.html?error=Please%20login%20to%20access%20this%20page');
+};
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).send('Internal Server Error');
+});
+
+// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
