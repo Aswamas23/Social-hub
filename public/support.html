@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Support & Community | Social Hub</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-section white">Social Hub</div>
+    <div class="nav-section gold">
+      <a href="/login.html">Login</a>
+      <a href="/signup.html">Sign Up</a>
+    </div>
+    <div class="nav-section black">
+      <a href="/support.html" class="active-link">Support & Community</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="support-hero">
+      <h1>Welcome to the Social Hub Support & Community</h1>
+      <p>
+        Here, members connect, share experiences, and support each other in an inclusive, discrimination-free environment.
+      </p>
+    </section>
+
+    <section class="community-guidelines">
+      <h2>Community Guidelines</h2>
+      <ul>
+        <li>Respect everyone’s opinions and backgrounds.</li>
+        <li>No discrimination or harassment tolerated.</li>
+        <li>Be supportive and constructive in your feedback.</li>
+        <li>Protect your privacy and respect others’ privacy.</li>
+        <li>Report any inappropriate behavior to moderators.</li>
+      </ul>
+    </section>
+
+    <section class="support-resources">
+      <h2>Support Resources</h2>
+      <p>If you need help or want to contribute, explore these resources:</p>
+      <ul>
+        <li><a href="https://www.mentalhealth.gov/" target="_blank" rel="noopener">Mental Health Support</a></li>
+        <li><a href="https://www.rainn.org/" target="_blank" rel="noopener">Sexual Assault Support</a></li>
+        <li><a href="https://www.usa.gov/benefits" target="_blank" rel="noopener">Government Assistance Programs</a></li>
+        <li><a href="https://www.peersupport.org/" target="_blank" rel="noopener">Peer Support Networks</a></li>
+      </ul>
+    </section>
+
+    <section class="community-forum">
+      <h2>Community Forum</h2>
+      <p>Coming soon: a space where members can post questions, share advice, and support each other in real-time.</p>
+      <p>Stay tuned!</p>
+    </section>
+  </main>
+  <script>
+  const toggleButton = document.querySelector('.nav-toggle');
+  const navMenu = document.querySelector('.nav-menu');
+
+  toggleButton.addEventListener('click', () => {
+    navMenu.classList.toggle('active');
+    toggleButton.classList.toggle('active');
+  });
+
+  // Optional: close menu when clicking a link
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', () => {
+      navMenu.classList.remove('active');
+      toggleButton.classList.remove('active');
+    });
+  });
+</script>
+
+</body>
+</html>
